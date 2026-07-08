@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIKIDS Attendance System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg: #0a0f1e; --card: #111827; --accent: #00e5ff; 
+            --green: #10b981; --red: #ef4444; --text: #f1f5f9; 
+            --muted: #64748b; --border: rgba(255,255,255,0.07);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Space Grotesk', 'Noto Sans Khmer', sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 15px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        
+        @media screen and (max-width: 600px) { .admin-only { display: none; } }
+
+        .card { background: var(--card); border-radius: 15px; border: 1px solid var(--border); padding: 20px; text-align: center; margin-bottom: 20px; }
+        #qrcode { background: white; padding: 10px; display: inline-block; border-radius: 10px; margin: 15px 0; }
+        .scan-box { background: #1a2235; padding: 20px; border-radius: 15px; border: 1px solid var(--accent); }
+        select, .btn { width: 100%; padding: 15px; margin-top: 10px; border-radius: 10px; font-size: 16px; border: none; font-weight: bold; cursor: pointer; }
+        select { background: var(--bg); color: white; border: 1px solid var(--border); }
+        
+        .btn-morning { background: var(--green); color: white; }
+        .btn-afternoon { background: #7c3aed; color: white; }
+        .btn-checkout { background: var(--red); color: white; }
+        .btn-summary { background: var(--accent); color: #000; margin-top: 20px; }
+        .btn-reset { background: #374151; color: #f87171; margin-top: 10px; }
+        .btn-setloc { background: #f59e0b; color: #000; margin-top: 10px; }
+        
+        .table-wrap { overflow-x: auto; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; background: var(--card); min-width: 600px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+        th { background: #1f2937; color: var(--accent); }
+        .late-text { color: var(--red); font-weight: bold; }
+
+        /* ===== EDITABLE CELL STYLES ===== */
+        .cell-input {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-family: 'Space Grotesk', 'Noto Sans Khmer', sans-serif;
+            font-size: 11px;
+            width: 100%;
+            padding: 2px 4px;
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+        }
+        .cell-input:hover { background: rgba(0,229,255,0.05); }
+        .cell-input:focus {
+            background: rgba(0,229,255,0.08);
+            box-shadow: 0 0 0 1px var(--accent);
+            color: var(--accent);
+            cursor: text;
+        }
+        .cell-input.has-value { color: #a3e635; }
+        .cell-input.late-val { color: var(--red) !important; }
+        .cell-input::placeholder { color: var(--muted); }
+        /* ================================ */
+
+        .loc-status {
+            font-size: 12px; margin-top: 10px; padding: 8px; border-radius: 8px;
+            background: rgba(255,255,255,0.03); color: var(--muted);
+        }
+        .loc-status.ok { color: var(--green); }
+        .loc-status.bad { color: var(--red); }
+
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: #1f2937; color: var(--text); padding: 12px 24px; border-radius: 10px;
+            border: 1px solid var(--accent); font-size: 14px; transition: transform 0.3s ease;
+            z-index: 999; max-width: 90%; text-align: center;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+        .toast.success { border-color: var(--green); }
+        .toast.error { border-color: var(--red); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align:center; color:var(--accent); margin-bottom:15px;">MIKIDS ATTENDANCE</h2>
+
+    <div class="card admin-only">
+        <h3>QR សម្រាប់ស្កេន (Admin)</h3>
+        <div id="qrcode"></div>
+        <button class="btn btn-setloc" onclick="setSchoolLocation()">📍 កំណត់ទីតាំងសាលា (ធ្វើនៅសាលាតែម្ដងគត់)</button>
+        <div class="loc-status" id="loc-status-display">កំពុងពិនិត្យទីតាំងសាលា...</div>
+    </div>
+
+    <div class="scan-box">
+        <label>ជ្រើសរើសឈ្មោះបុគ្គលិក:</label>
+        <select id="staff-name"></select>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <button class="btn btn-morning" onclick="submitAttendance('morning')">☀️ CheckIn(Morning)</button>
+            <button class="btn btn-afternoon" onclick="submitAttendance('afternoon')">🌤️ CheckIn(Afternoon)</button>
+            <button class="btn btn-checkout" onclick="submitAttendance('checkout')">🚪 CheckOut</button>
+        </div>
+        <div class="loc-status" id="loc-status-scan"></div>
+    </div>
+
+    <button class="btn btn-summary admin-only" onclick="sendSummaryToTelegram()">📤 ផ្ញើរបាយការណ៍សរុបទៅ Telegram</button>
+    <button class="btn btn-reset admin-only" onclick="resetRecords()">🗑️ លុបទិន្នន័យថ្ងៃនេះ (Reset)</button>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>CheckIn (AM)</th>
+                    <th>Late (AM)</th>
+                    <th>CheckIn (PM)</th>
+                    <th>Late (PM)</th>
+                    <th>CheckOut</th>
+                </tr>
+            </thead>
+            <tbody id="attendance-list"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CONFIG = {
+    token: '8242266919:AAGE6uMJ_-UvM-3KBZkJVFhJyTLvcTVW5tQ',
+    chatId: '-1003584563383',
+    morningLate: '07:05',   
+    afternoonLate: '13:05', 
+    githubLink: 'https://chanthoeur8-cell.github.io/Attendance-staff/',
+    allowedRadiusMeters: 150 // អាចកែបានតាមចង់បាន — ចម្ងាយអតិបរមាដែលអនុញ្ញាតឲ្យស្កេន
+};
+
+const STAFF_LIST = [
+    { name: "Chanthoeurn chhoeurn", role: "IT" },
+    { name: "Ashley villela", role: "English Teacher" },
+    { name: "វិន សេរីភាព", role: "Assistant Teacher" },
+    { name: "CHOT HORN", role: "Teacher" },
+    { name: "Po Sodin", role: "Administration &Teacher" },
+    { name: "អឿន កាណាល់", role: "Teacher" },
+    { name: "Desha Bushell", role: "English Teacher" },
+    { name: "Leang Sopheavy", role: "Computer Teacher" },
+    { name: "Chamnan Veasna", role: "English Teacher" },
+    { name: "Born Chhorda", role: "Teacher" },
+    { name: "SOK SREYPICE", role: "English Teacher" },
+    { name: "Eng sreynin", role: "Receptionist" },
+    { name: "កុសល សៀកម៉េង", role: "Assistant Teacher" },
+    { name: "vat mouy saing", role: "Chinese Teacher" },
+    { name: "ឈឹមវ៉ាន លីហង្ស", role: "Teacher" },
+    { name: "Dorn Sreyneth", role: "English Teacher" },
+    { name: "Rath Nita", role: "Assistant Teacher" },
+    { name: "Sovannorng Mech", role: "English Teacher" }
+];
+
+// ========== AUTO RESET EACH DAY ==========
+const TODAY = new Date().toISOString().slice(0, 10);
+const storedDate = localStorage.getItem('mikids_date');
+if (storedDate !== TODAY) {
+    localStorage.removeItem('mikids_v2_db');
+    localStorage.setItem('mikids_date', TODAY);
+}
+
+let records = JSON.parse(localStorage.getItem('mikids_v2_db')) || {};
+
+// ========== SCHOOL LOCATION (GPS GATE) ==========
+// admin ត្រូវចុច "កំណត់ទីតាំងសាលា" ម្តងនៅសាលា ដើម្បីរក្សាទុកកូអរដោនេពិតប្រាកដ
+function getSchoolLocation() {
+    const raw = localStorage.getItem('mikids_school_location');
+    return raw ? JSON.parse(raw) : null;
+}
+
+function setSchoolLocation() {
+    if (!navigator.geolocation) {
+        showToast("ឧបករណ៍នេះមិនគាំទ្រ GPS ទេ!", 'error');
+        return;
+    }
+    showToast("កំពុងចាប់ទីតាំង...", 'success');
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            localStorage.setItem('mikids_school_location', JSON.stringify(loc));
+            showToast("✅ បានកំណត់ទីតាំងសាលារួចរាល់!", 'success');
+            updateLocationStatusDisplay();
+        },
+        (err) => {
+            showToast("❌ មិនអាចចាប់ទីតាំងបាន: " + err.message, 'error');
+        },
+        { enableHighAccuracy: true, timeout: 15000 }
+    );
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // earth radius in meters
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function updateLocationStatusDisplay() {
+    const el = document.getElementById('loc-status-display');
+    if (!el) return;
+    const school = getSchoolLocation();
+    if (school) {
+        el.textContent = `✅ ទីតាំងសាលាបានកំណត់ (${school.lat.toFixed(5)}, ${school.lng.toFixed(5)}) | កំណត់ចម្ងាយអនុញ្ញាត: ${CONFIG.allowedRadiusMeters}m`;
+        el.className = 'loc-status ok';
+    } else {
+        el.textContent = '⚠️ ទីតាំងសាលាមិនទាន់បានកំណត់ទេ — សូមចុចប៊ូតុងខាងលើពេលនៅសាលា';
+        el.className = 'loc-status bad';
+    }
+}
+
+// ត្រឡប់ជា Promise: resolve({ok:true}) ឬ resolve({ok:false, message})
+function verifyLocation() {
+    return new Promise((resolve) => {
+        const school = getSchoolLocation();
+        if (!school) {
+            resolve({ ok: false, message: "❌ ទីតាំងសាលាមិនទាន់បានកំណត់ទេ! សូមទាក់ទង admin ដើម្បីកំណត់ទីតាំងសាលាជាមុនសិន។" });
+            return;
+        }
+        if (!navigator.geolocation) {
+            resolve({ ok: false, message: "❌ ឧបករណ៍នេះមិនគាំទ្រការចាប់ទីតាំង GPS ទេ!" });
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const dist = haversineDistance(pos.coords.latitude, pos.coords.longitude, school.lat, school.lng);
+                if (dist <= CONFIG.allowedRadiusMeters) {
+                    resolve({ ok: true, distance: dist });
+                } else {
+                    resolve({ ok: false, message: `❌ អ្នកនៅឆ្ងាយពីសាលា ${Math.round(dist)}m! សូមចូលមកកាន់សាលាដើម្បីស្កេន (អនុញ្ញាតត្រឹម ${CONFIG.allowedRadiusMeters}m)` });
+                }
+            },
+            (err) => {
+                let msg = "❌ មិនអាចទទួលបានទីតាំងរបស់អ្នកទេ។";
+                if (err.code === 1) msg = "❌ សូមអនុញ្ញាតការចូលប្រើទីតាំង (Location Permission) ក្នុង browser របស់អ្នក!";
+                else if (err.code === 2) msg = "❌ មិនអាចកំណត់ទីតាំងបាន សូមពិនិត្យ GPS/Internet!";
+                else if (err.code === 3) msg = "❌ ការចាប់ទីតាំងយូរពេក សូមព្យាយាមម្តងទៀត!";
+                resolve({ ok: false, message: msg });
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    });
+}
+
+// ========== TOAST ==========
+function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type} show`;
+    setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+function formatLate(totalMins) {
+    if (totalMins <= 0) return "";
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return h > 0 ? `${h}ម៉ោង ${m}នាទី` : `${m}នាទី`;
+}
+
+function saveRecords() {
+    localStorage.setItem('mikids_v2_db', JSON.stringify(records));
+}
+
+function renderTable() {
+    const list = document.getElementById('attendance-list');
+    list.innerHTML = '';
+    STAFF_LIST.forEach(s => {
+        const r = records[s.name] || { morning: null, afternoon: null, checkout: null };
+
+        const amTime   = r.morning   ? r.morning.time   : '';
+        const amLate   = r.morning   ? formatLate(r.morning.late) : '';
+        const pmTime   = r.afternoon ? r.afternoon.time : '';
+        const pmLate   = r.afternoon ? formatLate(r.afternoon.late) : '';
+        const outTime  = r.checkout  ? r.checkout       : '';
+
+        list.innerHTML += `<tr>
+            <td><b>${s.name}</b></td>
+            <td><input class="cell-input ${amTime ? 'has-value' : ''}" 
+                placeholder="-" value="${amTime}"
+                onchange="manualEdit('${s.name}','am_time',this.value,this)" /></td>
+            <td><input class="cell-input late-val ${amLate ? 'has-value' : ''}" 
+                placeholder="-" value="${amLate}"
+                onchange="manualEdit('${s.name}','am_late',this.value,this)" /></td>
+            <td><input class="cell-input ${pmTime ? 'has-value' : ''}" 
+                placeholder="-" value="${pmTime}"
+                onchange="manualEdit('${s.name}','pm_time',this.value,this)" /></td>
+            <td><input class="cell-input late-val ${pmLate ? 'has-value' : ''}" 
+                placeholder="-" value="${pmLate}"
+                onchange="manualEdit('${s.name}','pm_late',this.value,this)" /></td>
+            <td><input class="cell-input ${outTime ? 'has-value' : ''}" 
+                placeholder="-" value="${outTime}"
+                onchange="manualEdit('${s.name}','checkout',this.value,this)" /></td>
+        </tr>`;
+    });
+}
+
+// ===== Manual edit handler =====
+function manualEdit(name, field, value, el) {
+    if (!records[name]) records[name] = { morning: null, afternoon: null, checkout: null };
+
+    if (field === 'am_time') {
+        if (!records[name].morning) records[name].morning = { time: '', late: 0 };
+        records[name].morning.time = value;
+    } else if (field === 'am_late') {
+        if (!records[name].morning) records[name].morning = { time: '', late: 0 };
+        const mins = parseInt(value);
+        records[name].morning.late = isNaN(mins) ? 0 : mins;
+    } else if (field === 'pm_time') {
+        if (!records[name].afternoon) records[name].afternoon = { time: '', late: 0 };
+        records[name].afternoon.time = value;
+    } else if (field === 'pm_late') {
+        if (!records[name].afternoon) records[name].afternoon = { time: '', late: 0 };
+        const mins = parseInt(value);
+        records[name].afternoon.late = isNaN(mins) ? 0 : mins;
+    } else if (field === 'checkout') {
+        records[name].checkout = value;
+    }
+
+    el.classList.toggle('has-value', !!value);
+    saveRecords();
+}
+
+async function submitAttendance(type) {
+    const name = document.getElementById('staff-name').value;
+    if (!name) return showToast("សូមជ្រើសរើសឈ្មោះ!", 'error');
+
+    const scanStatus = document.getElementById('loc-status-scan');
+    scanStatus.className = 'loc-status';
+    scanStatus.textContent = '📍 កំពុងពិនិត្យទីតាំងរបស់អ្នក...';
+
+    const locResult = await verifyLocation();
+    if (!locResult.ok) {
+        scanStatus.textContent = locResult.message;
+        scanStatus.className = 'loc-status bad';
+        showToast(locResult.message, 'error');
+        return;
+    }
+    scanStatus.textContent = `✅ ទីតាំងត្រឹមត្រូវ (ចម្ងាយ ${Math.round(locResult.distance)}m ពីសាលា)`;
+    scanStatus.className = 'loc-status ok';
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const time24 = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString('km-KH');
+
+    const staff = STAFF_LIST.find(s => s.name === name);
+    const role = staff ? staff.role : 'N/A';
+
+    if (!records[name]) records[name] = { morning: null, afternoon: null, checkout: null };
+
+    let lateMins = 0;
+    let label = "";
+
+    if (type === 'morning') {
+        if (records[name].morning) return showToast("អ្នកបានស្កេនព្រឹករួចហើយ!", 'error');
+        const [th, tm] = CONFIG.morningLate.split(':').map(Number);
+        const [ch, cm] = time24.split(':').map(Number);
+        lateMins = Math.max(0, (ch * 60 + cm) - (th * 60 + tm));
+        records[name].morning = { time: timeStr, late: lateMins };
+        label = "☀️ Morning Check-In";
+    } else if (type === 'afternoon') {
+        if (records[name].afternoon) return showToast("អ្នកបានស្កេនថ្ងៃរួចហើយ!", 'error');
+        const [th, tm] = CONFIG.afternoonLate.split(':').map(Number);
+        const [ch, cm] = time24.split(':').map(Number);
+        lateMins = Math.max(0, (ch * 60 + cm) - (th * 60 + tm));
+        records[name].afternoon = { time: timeStr, late: lateMins };
+        label = "🌤️ Afternoon Check-In";
+    } else {
+        if (records[name].checkout) return showToast("អ្នកបានស្កេនចេញរួចហើយ!", 'error');
+        records[name].checkout = timeStr;
+        label = "🚪 Check-Out";
+    }
+
+    const lateInfo = (type !== 'checkout' && lateMins > 0) 
+        ? `⚠️ យឺត: ${formatLate(lateMins)}` 
+        : (type !== 'checkout' ? '✅ ទាន់ពេល' : '');
+
+    sendToTelegram(`🔔 <b>${label} | MIKIDS</b>\n📅 ${dateStr}\n👤 ឈ្មោះ: <b>${name}</b>\nRole: <b>${role}</b>\n⏰ ម៉ោង: ${timeStr}\n📍 ចម្ងាយ: ${Math.round(locResult.distance)}m\n${lateInfo}`);
+    
+    saveRecords();
+    showToast("✅ ស្កេនជោគជ័យ!", 'success');
+    renderTable();
+}
+
+function sendSummaryToTelegram() {
+    const dateStr = new Date().toLocaleDateString('km-KH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    let msg = `📊 <b>របាយការណ៍សរុប</b>\n📅 ${dateStr}\n\n`;
+
+    STAFF_LIST.forEach((s, i) => {
+        const r = records[s.name];
+        if (r && (r.morning || r.afternoon || r.checkout)) {
+            const m = r.morning ? r.morning.time : '-';
+            const a = r.afternoon ? r.afternoon.time : '-';
+            const o = r.checkout ? r.checkout : '-';
+            msg += `${i+1}. ✅ <b>${s.name}</b>\n   AM: ${m} | PM: ${a} | Out: ${o}\n`;
+        } else {
+            msg += `${i+1}. ❌ <b>${s.name}</b>: អវត្តមាន\n`;
+        }
+    });
+
+    sendToTelegram(msg);
+    showToast("📤 ផ្ញើរបាយការណ៍រួចរាល់!");
+}
+
+function resetRecords() {
+    if (!confirm("តើអ្នកពិតជាចង់លុបទិន្នន័យថ្ងៃនេះទាំងអស់?")) return;
+    records = {};
+    localStorage.removeItem('mikids_v2_db');
+    renderTable();
+    showToast("🗑️ លុបទិន្នន័យរួចរាល់!", 'error');
+}
+
+function sendToTelegram(msg) {
+    fetch(`https://api.telegram.org/bot${CONFIG.token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: CONFIG.chatId, text: msg, parse_mode: 'HTML' })
+    });
+}
+
+window.onload = () => {
+    new QRCode(document.getElementById("qrcode"), { text: CONFIG.githubLink, width: 150, height: 150 });
+    const select = document.getElementById('staff-name');
+    select.innerHTML = '<option value="">-- Select --</option>' + STAFF_LIST.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    renderTable();
+    updateLocationStatusDisplay();
+};
+</script>
+</body>
+</html>
