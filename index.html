@@ -89,7 +89,8 @@
     <div class="card admin-only">
         <h3>QR សម្រាប់ស្កេន (Admin)</h3>
         <div id="qrcode"></div>
-        <button class="btn btn-setloc" onclick="setSchoolLocation()">📍 កំណត់ទីតាំងសាលា (ធ្វើនៅសាលាតែម្ដងគត់)</button>
+        <button class="btn btn-setloc" onclick="setSchoolLocation()">📍 កែប្រែទីតាំងសាលា (ជម្រើស — ប្រើតែពេលចង់ប្តូរទីតាំង)</button>
+        <button class="btn" style="background:#1f2937; color:var(--accent); border:1px solid var(--accent); margin-top:10px;" onclick="window.open(CONFIG.schoolMapLink, '_blank')">🗺️ មើលទីតាំងសាលាលើ Google Maps</button>
         <div class="loc-status" id="loc-status-display">កំពុងពិនិត្យទីតាំងសាលា...</div>
     </div>
 
@@ -102,6 +103,7 @@
             <button class="btn btn-checkout" onclick="submitAttendance('checkout')">🚪 CheckOut</button>
         </div>
         <div class="loc-status" id="loc-status-scan"></div>
+        <a href="#" onclick="window.open(CONFIG.schoolMapLink, '_blank'); return false;" style="display:block; text-align:center; margin-top:12px; color:var(--accent); font-size:12px; text-decoration:underline;">🗺️ មើលទីតាំងសាលា</a>
     </div>
 
     <button class="btn btn-summary admin-only" onclick="sendSummaryToTelegram()">📤 ផ្ញើរបាយការណ៍សរុបទៅ Telegram</button>
@@ -133,7 +135,10 @@ const CONFIG = {
     morningLate: '07:05',   
     afternoonLate: '13:05', 
     githubLink: 'https://chanthoeur8-cell.github.io/Attendance-staff/',
-    allowedRadiusMeters: 150 // អាចកែបានតាមចង់បាន — ចម្ងាយអតិបរមាដែលអនុញ្ញាតឲ្យស្កេន
+    schoolMapLink: 'https://goo.gl/maps/WVQkhMkksk1uiJrU7',
+    schoolLat: 11.615850,
+    schoolLng: 104.908336,
+    allowedRadiusMeters: 10000 // អាចកែបានតាមចង់បាន — ចម្ងាយអតិបរមាដែលអនុញ្ញាតឲ្យស្កេន (10គីឡូម៉ែត្រ)
 };
 
 const STAFF_LIST = [
@@ -171,7 +176,9 @@ let records = JSON.parse(localStorage.getItem('mikids_v2_db')) || {};
 // admin ត្រូវចុច "កំណត់ទីតាំងសាលា" ម្តងនៅសាលា ដើម្បីរក្សាទុកកូអរដោនេពិតប្រាកដ
 function getSchoolLocation() {
     const raw = localStorage.getItem('mikids_school_location');
-    return raw ? JSON.parse(raw) : null;
+    if (raw) return JSON.parse(raw);
+    // ទីតាំងសាលាដែលបានកំណត់ស្រាប់ក្នុងកូដ (MiKids International School)
+    return { lat: CONFIG.schoolLat, lng: CONFIG.schoolLng };
 }
 
 function setSchoolLocation() {
@@ -209,23 +216,15 @@ function updateLocationStatusDisplay() {
     const el = document.getElementById('loc-status-display');
     if (!el) return;
     const school = getSchoolLocation();
-    if (school) {
-        el.textContent = `✅ ទីតាំងសាលាបានកំណត់ (${school.lat.toFixed(5)}, ${school.lng.toFixed(5)}) | កំណត់ចម្ងាយអនុញ្ញាត: ${CONFIG.allowedRadiusMeters}m`;
-        el.className = 'loc-status ok';
-    } else {
-        el.textContent = '⚠️ ទីតាំងសាលាមិនទាន់បានកំណត់ទេ — សូមចុចប៊ូតុងខាងលើពេលនៅសាលា';
-        el.className = 'loc-status bad';
-    }
+    const isCustom = !!localStorage.getItem('mikids_school_location');
+    el.textContent = `✅ ទីតាំងសាលា: ${school.lat.toFixed(6)}, ${school.lng.toFixed(6)} ${isCustom ? '(កំណត់ដោយដៃ)' : '(MiKids School)'} | ចម្ងាយអនុញ្ញាត: ${CONFIG.allowedRadiusMeters}m`;
+    el.className = 'loc-status ok';
 }
 
 // ត្រឡប់ជា Promise: resolve({ok:true}) ឬ resolve({ok:false, message})
 function verifyLocation() {
     return new Promise((resolve) => {
         const school = getSchoolLocation();
-        if (!school) {
-            resolve({ ok: false, message: "❌ ទីតាំងសាលាមិនទាន់បានកំណត់ទេ! សូមទាក់ទង admin ដើម្បីកំណត់ទីតាំងសាលាជាមុនសិន។" });
-            return;
-        }
         if (!navigator.geolocation) {
             resolve({ ok: false, message: "❌ ឧបករណ៍នេះមិនគាំទ្រការចាប់ទីតាំង GPS ទេ!" });
             return;
